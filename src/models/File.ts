@@ -13,12 +13,14 @@ export interface IFile extends Document {
   observaciones: string;
   metros: number;
   valor: number;
+  reposicion: boolean;
+  metodoPago: string;
 }
 
 const fileSchema: Schema = new Schema({
   nombre: { type: String, required: true },
   ubicacion: { type: String, required: true },
-  fecha: { type: Date, default: Date.now },
+  fecha: { type: Date },
   status: { type: String, default: 'pending' },
   tamanio: { type: String },
   cliente: { type: Schema.Types.ObjectId, ref: 'Client' },
@@ -27,6 +29,8 @@ const fileSchema: Schema = new Schema({
   observaciones: { type: String },
   valor: { type: Number },
   metros: { type: Number },
+  reposicion: { type: Boolean, default: false },
+  metodoPago: { type: String },
 });
 
 export default mongoose.model<IFile>('File', fileSchema);

@@ -30,7 +30,7 @@ export const searchClients = async (req: Request, res: Response): Promise<void> 
 
   if (nombre) {
     orConditions.push({
-      celular: { $regex: new RegExp(escapeRegex(nombre), 'i') },
+      nombre: { $regex: new RegExp(escapeRegex(nombre), 'i') },
     });
   }
 
