@@ -15,8 +15,8 @@ interface UploadBody {
   reposicion?: boolean;
 }
 
-const calculatePriceDTFTEXTIL = (meters: number): number => {
-  const centimeters = meters * 100;
+const calculatePriceDTFTEXTIL = (meters: number, copies: number): number => {
+  const centimeters = meters * 100 * copies;
   if (centimeters <= 20) {
     return 7000;
   } else if (centimeters < 75) {
@@ -36,9 +36,9 @@ const calculatePriceDTFTEXTIL = (meters: number): number => {
   }
 };
 
-const calculatePriceDTFUV = (meters: number): number => {
+const calculatePriceDTFUV = (meters: number, copies: number): number => {
   // Logic copied from DTF Textil as requested, values to be modified later
-  const centimeters = meters * 100;
+  const centimeters = meters * 100 * copies;
   if (centimeters <= 20) {
     return 25000;
   } else if (centimeters > 20 && centimeters <= 50) {
@@ -55,23 +55,23 @@ const calculatePriceDTFUV = (meters: number): number => {
   }
 };
 
-const calculatePricePlotter = (meters: number): number => {
+const calculatePricePlotter = (meters: number, copies: number): number => {
   // Logic copied from DTF Textil as requested, values to be modified later
   if (meters > 10) {
-    return meters * 12000;
+    return meters * 12000 * copies;
   }
-  return meters * 15000;
+  return meters * 15000 * copies;
 };
 
-const calculatePrice = (meters: number, maquina: string = ''): number => {
+const calculatePrice = (meters: number, maquina: string = '', copies: number): number => {
   const machineUpper = maquina.toUpperCase();
   if (machineUpper.includes('UV')) {
-    return calculatePriceDTFUV(meters);
+    return calculatePriceDTFUV(meters, copies);
   } else if (machineUpper.includes('PLOTTER')) {
-    return calculatePricePlotter(meters);
+    return calculatePricePlotter(meters, copies);
   } else {
     // Default to DTF TEXTIL
-    return calculatePriceDTFTEXTIL(meters);
+    return calculatePriceDTFTEXTIL(meters, copies);
   }
 };
 
@@ -178,7 +178,7 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
         impresora: maquina,
         observaciones: observaciones,
         metros: parsedMeters,
-        valor: parsedMeters > 0 ? calculatePrice(parsedMeters, maquina) : 0,
+        valor: parsedMeters > 0 ? calculatePrice(parsedMeters, maquina, Number(copias)) : 0,
         reposicion: reposicion ? true : false,
         status: 'En proceso',
       });
