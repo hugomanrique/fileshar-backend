@@ -31,7 +31,7 @@ async function testEndpoints() {
     form.append('copias', '2');
     form.append('impresora', 'HP Laserjet');
     form.append('comentarios', 'Print double sided');
-    form.append('tamaño', 'A4');
+    form.append('tamanio', 'A4');
 
     const res = await axios.post(`${baseURL}/upload`, form, {
       headers: {

@@ -20,6 +20,7 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use('/', clientRoutes);
 app.use('/', uploadRoutes);
+app.use('/uploads', express.static('uploads'));
 
 // Basic health check
 app.get('/', (req: Request, res: Response) => {
