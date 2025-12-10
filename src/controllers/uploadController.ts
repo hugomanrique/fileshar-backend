@@ -78,9 +78,15 @@ const calculatePrice = (meters: number, maquina: string = '', copies: number): n
 import busboy from 'busboy';
 import path from 'path';
 import fs from 'fs';
+import { getIO } from '../socket/socket';
 
 export const handleUpload = async (req: Request, res: Response): Promise<void> => {
-  const bb = busboy({ headers: req.headers });
+  const bb = busboy({
+    headers: req.headers,
+    limits: {
+      fileSize: 6 * 1024 * 1024 * 1024, // 6 GB
+    },
+  });
   const fields: any = {};
   let fileData: any = null;
 
@@ -186,6 +192,11 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
       await newFile.save();
 
       // console.log('File Saved:', newFile);
+      // Notificas a todos los clientes que algo cambió
+      getIO().emit('files:updated', {
+        reason: 'new_file',
+        file: newFile,
+      });
 
       res.json({
         message: 'File uploaded and saved successfully',
@@ -261,7 +272,7 @@ export const getFiles = async (req: Request, res: Response): Promise<void> => {
       query.status = estado;
     }
 
-    const files = await File.find(query).populate('cliente');
+    const files = await File.find(query).populate('cliente').sort({ fecha: -1 });
 
     res.json(files);
   } catch (error) {

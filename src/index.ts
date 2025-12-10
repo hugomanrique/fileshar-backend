@@ -5,6 +5,8 @@ import fs from 'fs';
 import connectDB from './config/database';
 import clientRoutes from './routes/clientRoutes';
 import uploadRoutes from './routes/uploadRoutes';
+import http from 'http';
+import { initSocket } from './socket/socket';
 
 const app: Express = express();
 const PORT: number | string = process.env.PORT || 3000;
@@ -32,6 +34,9 @@ if (!fs.existsSync('uploads')) {
   fs.mkdirSync('uploads');
 }
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+initSocket(server);
+
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
