@@ -13,6 +13,7 @@ interface UploadBody {
   tamanio?: string;
   metros?: string | number;
   reposicion?: boolean;
+  basePrice?: number;
 }
 
 const calculatePriceDTFTEXTIL = (meters: number, copies: number): number => {
@@ -131,6 +132,7 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
         maquina,
         observaciones,
         metros,
+        basePrice,
       } = fields as UploadBody;
 
       // Parse centimetros (actually meters now) safely
@@ -172,6 +174,23 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
       });
       const dateBogota = new Date(bogotaString + ' UTC');
       // console.log('Stored Date (Bogota as UTC):', dateBogota);
+      const total =
+        parsedMeters > 0
+          ? (basePrice || 0) > 0
+            ? Number(basePrice) * parsedMeters
+            : calculatePrice(parsedMeters, maquina, Number(copias))
+          : 0;
+      // Generate Unique 4-digit Code
+      let code = '';
+      let isUnique = false;
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      while (!isUnique) {
+        code = Math.floor(1000 + Math.random() * 9000).toString();
+        const existing = await File.findOne({ code, createdAt: { $gte: weekAgo } });
+        if (!existing) {
+          isUnique = true;
+        }
+      }
 
       // 2. Create File Record
       const newFile = new File({
@@ -184,9 +203,10 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
         impresora: maquina,
         observaciones: observaciones,
         metros: parsedMeters,
-        valor: parsedMeters > 0 ? calculatePrice(parsedMeters, maquina, Number(copias)) : 0,
+        valor: total,
         reposicion: reposicion ? true : false,
         status: 'En proceso',
+        code: code,
       });
 
       await newFile.save();
@@ -202,6 +222,7 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
         message: 'File uploaded and saved successfully',
         file: newFile,
         client: client,
+        code: code, // Return the code explicitly if needed, though it's in the file object
       });
     } catch (error) {
       console.error('Upload error:', error);

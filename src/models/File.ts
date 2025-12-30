@@ -15,6 +15,7 @@ export interface IFile extends Document {
   valor: number;
   reposicion: boolean;
   metodoPago: string;
+  code: string;
 }
 
 const fileSchema: Schema = new Schema({
@@ -31,6 +32,7 @@ const fileSchema: Schema = new Schema({
   metros: { type: Number },
   reposicion: { type: Boolean, default: false },
   metodoPago: { type: String },
+  code: { type: String },
 });
 
 export default mongoose.model<IFile>('File', fileSchema);
