@@ -1,21 +1,22 @@
-import mongoose, { Document, Schema } from 'mongoose';
-import { IClient } from './Client';
+import mongoose, { Document, Schema } from 'mongoose'
+import { IClient } from './Client'
 
 export interface IFile extends Document {
-  nombre: string;
-  ubicacion: string; // Stored filename on disk
-  fecha: Date;
-  status: string;
-  tamanio: string; // stored as string to keep units if needed, or number bytes
-  cliente: IClient['_id'];
-  copias: number;
-  impresora: string;
-  observaciones: string;
-  metros: number;
-  valor: number;
-  reposicion: boolean;
-  metodoPago: string;
-  code: string;
+  nombre: string
+  ubicacion: string // Stored filename on disk
+  fecha: Date
+  status: string
+  tamanio: string // stored as string to keep units if needed, or number bytes
+  cliente: IClient['_id']
+  copias: number
+  impresora: string
+  observaciones: string
+  metros: number
+  valor: number
+  reposicion: boolean
+  metodoPago: string
+  code: string
+  basePrice: number
 }
 
 const fileSchema: Schema = new Schema({
@@ -33,6 +34,7 @@ const fileSchema: Schema = new Schema({
   reposicion: { type: Boolean, default: false },
   metodoPago: { type: String },
   code: { type: String },
-});
+  basePrice: { type: Number },
+})
 
-export default mongoose.model<IFile>('File', fileSchema);
+export default mongoose.model<IFile>('File', fileSchema)
