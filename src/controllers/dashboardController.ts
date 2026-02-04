@@ -29,6 +29,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
       newClientsResult,
       returningCustomerJobsResult,
       newClientsListResult,
+      printersResult,
     ] = await Promise.all([
       // 1. Gráfica de ventas diarias
       File.aggregate([
@@ -127,18 +128,96 @@ export const getDashboardStats = async (req: Request, res: Response) => {
       ]),
 
       // 6. Listado de clientes nuevos (Unique by phone number with meters in range)
+      // Client.aggregate([
+      //   {
+      //     $match: {
+      //       _id: { $gte: startId, $lte: endId },
+      //     },
+      //   },
+      //   // clave: ordenar para que $first sea el más reciente
+      //   { $sort: { _id: -1 } },
+      //   {
+      //     $group: {
+      //       _id: '$celular',
+      //       uniqueId: { $first: '$_id' },
+      //       nombre: { $first: '$nombre' },
+      //       email: { $first: '$email' },
+      //       identificacion: { $first: '$identificacion' },
+      //       celular: { $first: '$celular' },
+      //       allIds: { $push: '$_id' },
+      //     },
+      //   },
+      //   {
+      //     $lookup: {
+      //       from: 'files',
+      //       let: { clientIds: '$allIds' },
+      //       pipeline: [
+      //         {
+      //           $match: {
+      //             $expr: {
+      //               $and: [
+      //                 { $in: ['$cliente', '$$clientIds'] },
+      //                 { $gte: ['$fecha', start] },
+      //                 { $lte: ['$fecha', end] },
+      //               ],
+      //             },
+      //           },
+      //         },
+      //       ],
+      //       as: 'files',
+      //     },
+      //   },
+      //   {
+      //     $unwind: {
+      //       path: '$files',
+      //       preserveNullAndEmptyArrays: true,
+      //     },
+      //   },
+      //   {
+      //     $group: {
+      //       _id: '$_id',
+      //       uniqueId: { $first: '$uniqueId' },
+      //       nombre: { $first: '$nombre' },
+      //       email: { $first: '$email' },
+      //       identificacion: { $first: '$identificacion' },
+      //       celular: { $first: '$celular' },
+      //       createdAt: { $first: { $toDate: '$uniqueId' } },
+      //       totalMetros: {
+      //         $sum: {
+      //           $multiply: [{ $ifNull: ['$files.metros', 0] }, { $ifNull: ['$files.copias', 1] }],
+      //         },
+      //       },
+      //     },
+      //   },
+      //   {
+      //     $project: {
+      //       _id: '$uniqueId',
+      //       nombre: 1,
+      //       email: 1,
+      //       celular: 1,
+      //       identificacion: 1,
+      //       createdAt: 1,
+      //       totalMetros: 1,
+      //     },
+      //   },
+      //   { $sort: { createdAt: -1 } },
+      // ]),
       Client.aggregate([
+        // 1) Clientes creados en el rango (por ObjectId)
         {
           $match: {
             _id: { $gte: startId, $lte: endId },
           },
         },
-        // clave: ordenar para que $first sea el más reciente
-        { $sort: { _id: -1 } },
+
+        // ✅ si quieres "registro real" (más viejo) por celular
+        { $sort: { _id: 1 } },
+
+        // 2) Unificar por celular (si existen duplicados)
         {
           $group: {
             _id: '$celular',
-            uniqueId: { $first: '$_id' },
+            uniqueId: { $first: '$_id' }, // el más viejo por el sort asc
             nombre: { $first: '$nombre' },
             email: { $first: '$email' },
             identificacion: { $first: '$identificacion' },
@@ -146,6 +225,8 @@ export const getDashboardStats = async (req: Request, res: Response) => {
             allIds: { $push: '$_id' },
           },
         },
+
+        // 3) Traer trabajos (files) de esos clientes dentro del rango de fechas
         {
           $lookup: {
             from: 'files',
@@ -162,44 +243,124 @@ export const getDashboardStats = async (req: Request, res: Response) => {
                   },
                 },
               },
+              // opcional: solo campos necesarios
+              // { $project: { metros: 1, copias: 1, impresora: 1, fecha: 1 } },
             ],
             as: 'files',
           },
         },
+
+        // 4) Facet: lista por cliente + resumen por impresora
         {
-          $unwind: {
-            path: '$files',
-            preserveNullAndEmptyArrays: true,
+          $facet: {
+            clientes: [
+              { $unwind: { path: '$files', preserveNullAndEmptyArrays: true } },
+              {
+                $group: {
+                  _id: '$_id', // celular
+                  uniqueId: { $first: '$uniqueId' },
+                  nombre: { $first: '$nombre' },
+                  email: { $first: '$email' },
+                  identificacion: { $first: '$identificacion' },
+                  celular: { $first: '$celular' },
+                  createdAt: { $first: { $toDate: '$uniqueId' } },
+                  totalMetros: {
+                    $sum: {
+                      $multiply: [
+                        { $ifNull: ['$files.metros', 0] },
+                        { $ifNull: ['$files.copias', 1] },
+                      ],
+                    },
+                  },
+                },
+              },
+              {
+                $project: {
+                  _id: '$uniqueId',
+                  nombre: 1,
+                  email: 1,
+                  celular: 1,
+                  identificacion: 1,
+                  createdAt: 1,
+                  totalMetros: 1,
+                },
+              },
+              { $sort: { createdAt: -1 } },
+            ],
+
+            impresoras: [
+              // aquí NO queremos preservar vacíos, porque solo cuentan files reales
+              { $unwind: { path: '$files', preserveNullAndEmptyArrays: false } },
+              {
+                $group: {
+                  _id: '$files.impresora',
+                  totalMetros: {
+                    $sum: {
+                      $multiply: [
+                        { $ifNull: ['$files.metros', 0] },
+                        { $ifNull: ['$files.copias', 1] },
+                      ],
+                    },
+                  },
+                  clientesUnicos: { $addToSet: '$uniqueId' },
+                  trabajos: { $sum: 1 },
+                },
+              },
+              {
+                $project: {
+                  _id: 0,
+                  impresora: '$_id',
+                  totalMetros: 1,
+                  trabajos: 1,
+                  clientesNuevosConTrabajo: { $size: '$clientesUnicos' },
+                },
+              },
+              { $sort: { totalMetros: -1 } },
+            ],
           },
         },
+      ]),
+      File.aggregate([
+        // 1) Filtrar trabajos en rango de fechas
         {
-          $group: {
-            _id: '$_id',
-            uniqueId: { $first: '$uniqueId' },
-            nombre: { $first: '$nombre' },
-            email: { $first: '$email' },
-            identificacion: { $first: '$identificacion' },
-            celular: { $first: '$celular' },
-            createdAt: { $first: { $toDate: '$uniqueId' } },
-            totalMetros: {
-              $sum: {
-                $multiply: [{ $ifNull: ['$files.metros', 0] }, { $ifNull: ['$files.copias', 1] }],
-              },
+          $match: {
+            fecha: { $gte: start, $lte: end },
+          },
+        },
+
+        // 2) Normalizar valores para evitar NaN
+        {
+          $addFields: {
+            metrosCalc: {
+              $multiply: [{ $ifNull: ['$metros', 0] }, { $ifNull: ['$copias', 1] }],
             },
           },
         },
+
+        // 3) Agrupar por impresora
         {
-          $project: {
-            _id: '$uniqueId',
-            nombre: 1,
-            email: 1,
-            celular: 1,
-            identificacion: 1,
-            createdAt: 1,
-            totalMetros: 1,
+          $group: {
+            _id: { $ifNull: ['$impresora', 'SIN_IMPRESORA'] },
+            totalMetros: { $sum: '$metrosCalc' },
+            trabajos: { $sum: 1 },
           },
         },
-        { $sort: { createdAt: -1 } },
+
+        // 4) Salida limpia
+        {
+          $project: {
+            _id: 0,
+            impresora: '$_id',
+            totalMetros: {
+              // opcional: redondear si manejas decimales
+              $round: ['$totalMetros', 2],
+            },
+            trabajos: 1,
+          },
+        },
+
+        // 5) Orden por mayor consumo
+        { $sort: { totalMetros: -1 } },
       ]),
     ])
 
@@ -214,6 +375,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
       newClients,
       returningCustomerJobs,
       newClientsList,
+      printersResult,
     })
   } catch (error: any) {
     console.error('Error in getDashboardStats:', error)
