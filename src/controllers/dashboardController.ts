@@ -239,6 +239,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
                       { $in: ['$cliente', '$$clientIds'] },
                       { $gte: ['$fecha', start] },
                       { $lte: ['$fecha', end] },
+                      { $ne: ['$status', 'Error'] },
                     ],
                   },
                 },
@@ -325,6 +326,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         {
           $match: {
             fecha: { $gte: start, $lte: end },
+            status: { $ne: 'Error' },
           },
         },
 
