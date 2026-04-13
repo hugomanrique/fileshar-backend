@@ -6,6 +6,7 @@ import connectDB from './config/database'
 import clientRoutes from './routes/clientRoutes'
 import uploadRoutes from './routes/uploadRoutes'
 import dashboardRoutes from './routes/dashboardRoutes'
+import orderRoutes from './routes/orderRoutes'
 import http from 'http'
 import { initSocket } from './socket/socket'
 
@@ -24,6 +25,7 @@ app.use(express.urlencoded({ extended: true, limit: '5gb' }))
 app.use('/', clientRoutes)
 app.use('/', uploadRoutes)
 app.use('/', dashboardRoutes)
+app.use('/', orderRoutes)
 app.use('/uploads', express.static('uploads'))
 
 // Basic health check

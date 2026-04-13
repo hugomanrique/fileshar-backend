@@ -1,22 +1,29 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from 'mongoose'
 
 export interface IClient extends Document {
-  nombre: string;
-  identificacion: string;
-  email: string;
-  celular: string;
+  nombre: string
+  identificacion: string
+  email: string
+  celular: string
+  direccion: string
+  tipo: string
 }
 
-const clientSchema: Schema = new Schema({
-  nombre: {
-    type: String,
-    required: true,
-    index: true
+const clientSchema: Schema = new Schema(
+  {
+    nombre: {
+      type: String,
+      required: true,
+      index: true,
+    },
+    identificacion: { type: String, index: true },
+    email: { type: String },
+    celular: { type: String },
+    direccion: { type: String },
+    tipo: { type: String },
+    // Add other fields as needed
   },
-  identificacion: { type: String, index: true },
-  email: { type: String },
-  celular: { type: String },
-  // Add other fields as needed
-}, { strict: false });
+  { strict: false },
+)
 
-export default mongoose.model<IClient>('Client', clientSchema);
+export default mongoose.model<IClient>('Client', clientSchema)
