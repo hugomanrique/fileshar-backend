@@ -16,6 +16,14 @@ export interface IProduct {
     talla: string
     cantidad: number
   }[]
+  personalizaciones?: {
+    id: string
+    genero: string
+    talla: string
+    nombre: string
+    numero: string
+    cantidad: number
+  }[]
 }
 
 export interface IOrder extends Document {
@@ -44,6 +52,16 @@ const productSchema = new Schema({
     {
       genero: { type: String },
       talla: { type: String },
+      cantidad: { type: Number },
+    },
+  ],
+  personalizaciones: [
+    {
+      id: { type: String },
+      genero: { type: String },
+      talla: { type: String },
+      nombre: { type: String },
+      numero: { type: String },
       cantidad: { type: Number },
     },
   ],

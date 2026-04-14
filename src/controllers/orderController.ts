@@ -45,7 +45,6 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       // If they send data as strings, we parse it
       if (fields.payload) {
         payload = JSON.parse(fields.payload)
-        console.log('Payload recibido:', payload)
         clienteData = payload.cliente || {}
         productosData = payload.productos || []
       } else {
@@ -121,6 +120,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
           tieneReferencia: prod.tieneReferencia,
           referenciaArchivo: referenciaArchivo,
           distribucionTallas: prod.distribucionTallas || [],
+          personalizaciones: prod.personalizaciones || [],
         }
       })
 
@@ -184,5 +184,102 @@ export const addOrderComment = async (req: Request, res: Response): Promise<void
   } catch (error) {
     console.error('Error adding comment:', error)
     res.status(500).json({ message: 'Server error adding comment' })
+  }
+}
+
+export const updateProductTallas = async (req: Request, res: Response): Promise<void> => {
+  const { id, productId } = req.params
+  const { distribucionTallas } = req.body
+
+  if (!distribucionTallas || !Array.isArray(distribucionTallas)) {
+    res.status(400).json({ message: 'Distribución de tallas inválida.' })
+    return
+  }
+
+  try {
+    const order = await Order.findById(id)
+    if (!order) {
+      res.status(404).json({ message: 'Order not found' })
+      return
+    }
+
+    const product = order.productos.find((p) => p.id === productId)
+    if (!product) {
+      res.status(404).json({ message: 'Product not found in order' })
+      return
+    }
+
+    product.distribucionTallas = distribucionTallas
+
+    // Ensure the array correctly acts as modified for mongoose
+    order.markModified('productos')
+
+    const bogotaString = new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' })
+    const dateBogota = new Date(bogotaString + ' UTC')
+
+    const newTallasText = distribucionTallas.map((t) => `${t.talla}: ${t.cantidad}`).join(', ')
+    const comentarioTexto = `Se actualizaron las tallas del producto ${product.tipo}. Nuevas tallas: ${newTallasText.length ? newTallasText : 'Ninguna'}`
+
+    order.comentarios.push({
+      texto: comentarioTexto,
+      importancia: 'Amarillo',
+      fecha: dateBogota,
+    })
+
+    await order.save()
+
+    res.status(200).json({ message: 'Tallas actualizadas', order })
+  } catch (error) {
+    console.error('Error updating tallas:', error)
+    res.status(500).json({ message: 'Server error updating tallas' })
+  }
+}
+
+export const updateProductPersonalizaciones = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const { id, productId } = req.params
+  const { personalizaciones } = req.body
+
+  if (!personalizaciones || !Array.isArray(personalizaciones)) {
+    res.status(400).json({ message: 'Personalizaciones inválidas.' })
+    return
+  }
+
+  try {
+    const order = await Order.findById(id)
+    if (!order) {
+      res.status(404).json({ message: 'Order not found' })
+      return
+    }
+
+    const product = order.productos.find((p) => p.id === productId)
+    if (!product) {
+      res.status(404).json({ message: 'Product not found in order' })
+      return
+    }
+
+    product.personalizaciones = personalizaciones
+
+    order.markModified('productos')
+
+    const bogotaString = new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' })
+    const dateBogota = new Date(bogotaString + ' UTC')
+
+    const comentarioTexto = `Se actualizaron las personalizaciones del producto ${product.tipo}.`
+
+    order.comentarios.push({
+      texto: comentarioTexto,
+      importancia: 'Amarillo',
+      fecha: dateBogota,
+    })
+
+    await order.save()
+
+    res.status(200).json({ message: 'Personalizaciones actualizadas', order })
+  } catch (error) {
+    console.error('Error updating personalizaciones:', error)
+    res.status(500).json({ message: 'Server error updating personalizaciones' })
   }
 }
