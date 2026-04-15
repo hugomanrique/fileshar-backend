@@ -54,18 +54,21 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
 
       // 1. Process Client
       let client = null
-      if (clienteData.telefono) {
-        client = await Client.findOne({ celular: clienteData.telefono.trim() })
-      } else if (clienteData.identificacion) {
-        client = await Client.findOne({ identificacion: clienteData.identificacion.trim() })
+      const sanitizedTelefono = clienteData.telefono != null ? String(clienteData.telefono).replace(/\s+/g, '') : undefined
+      const sanitizedIdentificacion = clienteData.identificacion != null ? String(clienteData.identificacion).replace(/\s+/g, '') : undefined
+
+      if (sanitizedTelefono) {
+        client = await Client.findOne({ celular: sanitizedTelefono })
+      } else if (sanitizedIdentificacion) {
+        client = await Client.findOne({ identificacion: sanitizedIdentificacion })
       }
 
       if (!client) {
         client = new Client({
           nombre: clienteData.nombre || 'Unknown Client',
-          identificacion: clienteData.identificacion,
+          identificacion: sanitizedIdentificacion,
           email: clienteData.correo, // Map correo to email
-          celular: clienteData.telefono,
+          celular: sanitizedTelefono,
           direccion: clienteData.direccion,
           tipo: clienteData.tipo,
         })
@@ -81,8 +84,8 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
           client.direccion = clienteData.direccion
           updated = true
         }
-        if (clienteData.identificacion && client.identificacion !== clienteData.identificacion) {
-          client.identificacion = clienteData.identificacion
+        if (sanitizedIdentificacion && client.identificacion !== sanitizedIdentificacion) {
+          client.identificacion = sanitizedIdentificacion
           updated = true
         }
         if (clienteData.tipo && client.tipo !== clienteData.tipo) {

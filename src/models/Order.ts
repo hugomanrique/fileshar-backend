@@ -7,7 +7,7 @@ export interface IProduct {
   cantidad: number
   diseno?: string
   tela?: string
-  tecnica?: string
+  tecnica?: string[]
   especial?: boolean
   tieneReferencia?: boolean
   referenciaArchivo?: string
@@ -44,7 +44,7 @@ const productSchema = new Schema({
   cantidad: { type: Number, required: true },
   diseno: { type: String },
   tela: { type: String },
-  tecnica: { type: String },
+  tecnica: { type: [String] },
   especial: { type: Boolean },
   tieneReferencia: { type: Boolean },
   referenciaArchivo: { type: String },

@@ -26,4 +26,13 @@ const clientSchema: Schema = new Schema(
   { strict: false },
 )
 
+clientSchema.pre('save', function (this: IClient) {
+  if (this.identificacion) {
+    this.identificacion = this.identificacion.replace(/\s+/g, '')
+  }
+  if (this.celular) {
+    this.celular = this.celular.replace(/\s+/g, '')
+  }
+})
+
 export default mongoose.model<IClient>('Client', clientSchema)

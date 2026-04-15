@@ -141,10 +141,13 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
 
       // 1. Find or Create Client
       // Priority search by identificacion, then name
+      const sanitizedTelefono = telefono != null ? String(telefono).replace(/\s+/g, '') : undefined
+      const sanitizedIdentificacion = identificacion != null ? String(identificacion).replace(/\s+/g, '') : undefined
+
       let client = null
-      // if (identificacion) {
-      client = await Client.findOne({ celular: telefono?.trim() })
-      // }
+      if (sanitizedTelefono) {
+        client = await Client.findOne({ celular: sanitizedTelefono })
+      }
 
       if (!client && cliente) {
         // If not found by ID, try finding by name if ID wasn't exclusive?
@@ -157,15 +160,16 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
       if (!client) {
         client = new Client({
           nombre: cliente || 'Unknown Client',
-          identificacion,
+          identificacion: sanitizedIdentificacion,
           email,
-          celular: telefono,
+          celular: sanitizedTelefono,
         })
         await client.save()
       } else {
         // Update existing client info if provided?
         if (email) client.email = email
-        if (telefono) client.celular = telefono
+        if (sanitizedTelefono) client.celular = sanitizedTelefono
+        if (sanitizedIdentificacion) client.identificacion = sanitizedIdentificacion
         await client.save()
       }
       // Force date to be America/Bogotá time (stored as fake UTC)
