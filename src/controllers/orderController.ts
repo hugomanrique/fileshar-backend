@@ -213,6 +213,7 @@ export const updateProductTallas = async (req: Request, res: Response): Promise<
     }
 
     product.distribucionTallas = distribucionTallas
+    product.cantidad = distribucionTallas.reduce((acc: number, t: any) => acc + (Number(t.cantidad) || 0), 0)
 
     // Ensure the array correctly acts as modified for mongoose
     order.markModified('productos')
