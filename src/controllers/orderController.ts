@@ -287,3 +287,121 @@ export const updateProductPersonalizaciones = async (
     res.status(500).json({ message: 'Server error updating personalizaciones' })
   }
 }
+
+export const updateOrderStatus = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params
+  const { status } = req.body
+
+  if (!status) {
+    res.status(400).json({ message: 'El estado es requerido.' })
+    return
+  }
+
+  try {
+    const order = await Order.findById(id)
+    if (!order) {
+      res.status(404).json({ message: 'Order not found' })
+      return
+    }
+
+    const oldStatus = order.status
+    if (oldStatus === status) {
+      res.status(200).json({ message: 'El estado es el mismo', order })
+      return
+    }
+
+    order.status = status
+
+    const bogotaString = new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' })
+    const dateBogota = new Date(bogotaString + ' UTC')
+
+    order.comentarios.push({
+      texto: `El estado de la orden cambió de "${oldStatus}" a "${status}".`,
+      importancia: 'Amarillo',
+      fecha: dateBogota,
+    })
+
+    await order.save()
+
+    res.status(200).json({ message: 'Estado de la orden actualizado', order })
+  } catch (error) {
+    console.error('Error updating order status:', error)
+    res.status(500).json({ message: 'Server error updating order status' })
+  }
+}
+
+export const updateProductImage = async (req: Request, res: Response): Promise<void> => {
+  const { id, productId } = req.params
+
+  const bb = busboy({
+    headers: req.headers,
+    limits: {
+      fileSize: 6 * 1024 * 1024 * 1024,
+    },
+  })
+
+  let filesData: any = null
+
+  bb.on('file', (name, file, info) => {
+    const { filename } = info
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9)
+    const saveName = uniqueSuffix + '-' + filename
+    const saveTo = path.join('uploads/', saveName)
+
+    filesData = {
+      filename: saveName,
+      originalname: filename,
+    }
+
+    const writeStream = fs.createWriteStream(saveTo)
+    file.pipe(writeStream)
+  })
+
+  bb.on('close', async () => {
+    if (!filesData) {
+      res.status(400).json({ message: 'No image uploaded' })
+      return
+    }
+
+    try {
+      const order = await Order.findById(id)
+      if (!order) {
+        res.status(404).json({ message: 'Order not found' })
+        return
+      }
+
+      const product = order.productos.find((p) => p.id === productId)
+      if (!product) {
+        res.status(404).json({ message: 'Product not found in order' })
+        return
+      }
+
+      const oldImage = product.tieneReferencia
+
+      product.referenciaArchivo = filesData.filename
+      product.tieneReferencia = true
+
+      order.markModified('productos')
+
+      const bogotaString = new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' })
+      const dateBogota = new Date(bogotaString + ' UTC')
+
+      order.comentarios.push({
+        texto: oldImage
+          ? `Se reemplazó la imagen de diseño del producto ${product.tipo}.`
+          : `Se agregó una imagen de diseño al producto ${product.tipo}.`,
+        importancia: 'Amarillo',
+        fecha: dateBogota,
+      })
+
+      await order.save()
+
+      res.status(200).json({ message: 'Image updated successfully', order })
+    } catch (error) {
+      console.error('Update image error:', error)
+      res.status(500).json({ message: 'Server error updating product image' })
+    }
+  })
+
+  req.pipe(bb)
+}
