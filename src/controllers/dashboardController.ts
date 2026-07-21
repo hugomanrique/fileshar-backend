@@ -22,6 +22,19 @@ export const getDashboardStats = async (req: Request, res: Response) => {
     const startId = mongoose.Types.ObjectId.createFromTime(Math.floor(start.getTime() / 1000))
     const endId = mongoose.Types.ObjectId.createFromTime(Math.floor(end.getTime() / 1000))
 
+    // Find HAR client ObjectIds to exclude internal company records
+    const harClients = await Client.find({ nombre: { $regex: /HAR/i } }).select('_id')
+    const harClientIds = harClients.map((c) => c._id)
+
+    // Base match filter for files (excludes HAR client and Error status)
+    const fileMatch: any = {
+      fecha: { $gte: start, $lte: end },
+      status: { $ne: 'Error' },
+    }
+    if (harClientIds.length > 0) {
+      fileMatch.cliente = { $nin: harClientIds }
+    }
+
     const [
       salesDaily,
       paymentMethodsDaily,
@@ -34,9 +47,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
       // 1. Gráfica de ventas diarias
       File.aggregate([
         {
-          $match: {
-            fecha: { $gte: start, $lte: end },
-          },
+          $match: fileMatch,
         },
         {
           $group: {
@@ -51,9 +62,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
       // 2. Gráfica de Comportamiento de metodos de pago diario
       File.aggregate([
         {
-          $match: {
-            fecha: { $gte: start, $lte: end },
-          },
+          $match: fileMatch,
         },
         {
           $group: {
@@ -71,9 +80,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
       // 3. Total de metodos de pago
       File.aggregate([
         {
-          $match: {
-            fecha: { $gte: start, $lte: end },
-          },
+          $match: fileMatch,
         },
         {
           $group: {
@@ -84,11 +91,12 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         },
       ]),
 
-      // 4. Clientes nuevos (Unique by phone number created in range)
+      // 4. Clientes nuevos (Unique by phone number created in range, excluding HAR)
       Client.aggregate([
         {
           $match: {
             _id: { $gte: startId, $lte: endId },
+            nombre: { $not: /HAR/i },
           },
         },
         {
@@ -101,12 +109,10 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         },
       ]),
 
-      // 5. Trabajos de clientes que retornaron
+      // 5. Trabajos de clientes que retornaron (excluding HAR and Error)
       File.aggregate([
         {
-          $match: {
-            fecha: { $gte: start, $lte: end },
-          },
+          $match: fileMatch,
         },
         {
           $lookup: {
@@ -120,6 +126,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         {
           $match: {
             'clientData._id': { $lt: startId },
+            'clientData.nombre': { $not: /HAR/i },
           },
         },
         {
@@ -127,86 +134,13 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         },
       ]),
 
-      // 6. Listado de clientes nuevos (Unique by phone number with meters in range)
-      // Client.aggregate([
-      //   {
-      //     $match: {
-      //       _id: { $gte: startId, $lte: endId },
-      //     },
-      //   },
-      //   // clave: ordenar para que $first sea el más reciente
-      //   { $sort: { _id: -1 } },
-      //   {
-      //     $group: {
-      //       _id: '$celular',
-      //       uniqueId: { $first: '$_id' },
-      //       nombre: { $first: '$nombre' },
-      //       email: { $first: '$email' },
-      //       identificacion: { $first: '$identificacion' },
-      //       celular: { $first: '$celular' },
-      //       allIds: { $push: '$_id' },
-      //     },
-      //   },
-      //   {
-      //     $lookup: {
-      //       from: 'files',
-      //       let: { clientIds: '$allIds' },
-      //       pipeline: [
-      //         {
-      //           $match: {
-      //             $expr: {
-      //               $and: [
-      //                 { $in: ['$cliente', '$$clientIds'] },
-      //                 { $gte: ['$fecha', start] },
-      //                 { $lte: ['$fecha', end] },
-      //               ],
-      //             },
-      //           },
-      //         },
-      //       ],
-      //       as: 'files',
-      //     },
-      //   },
-      //   {
-      //     $unwind: {
-      //       path: '$files',
-      //       preserveNullAndEmptyArrays: true,
-      //     },
-      //   },
-      //   {
-      //     $group: {
-      //       _id: '$_id',
-      //       uniqueId: { $first: '$uniqueId' },
-      //       nombre: { $first: '$nombre' },
-      //       email: { $first: '$email' },
-      //       identificacion: { $first: '$identificacion' },
-      //       celular: { $first: '$celular' },
-      //       createdAt: { $first: { $toDate: '$uniqueId' } },
-      //       totalMetros: {
-      //         $sum: {
-      //           $multiply: [{ $ifNull: ['$files.metros', 0] }, { $ifNull: ['$files.copias', 1] }],
-      //         },
-      //       },
-      //     },
-      //   },
-      //   {
-      //     $project: {
-      //       _id: '$uniqueId',
-      //       nombre: 1,
-      //       email: 1,
-      //       celular: 1,
-      //       identificacion: 1,
-      //       createdAt: 1,
-      //       totalMetros: 1,
-      //     },
-      //   },
-      //   { $sort: { createdAt: -1 } },
-      // ]),
+      // 6. Listado de clientes nuevos (Unique by phone number with meters in range, excluding HAR)
       Client.aggregate([
-        // 1) Clientes creados en el rango (por ObjectId)
+        // 1) Clientes creados en el rango (por ObjectId) excluyendo HAR
         {
           $match: {
             _id: { $gte: startId, $lte: endId },
+            nombre: { $not: /HAR/i },
           },
         },
 
@@ -244,8 +178,6 @@ export const getDashboardStats = async (req: Request, res: Response) => {
                   },
                 },
               },
-              // opcional: solo campos necesarios
-              // { $project: { metros: 1, copias: 1, impresora: 1, fecha: 1 } },
             ],
             as: 'files',
           },
@@ -322,12 +254,9 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         },
       ]),
       File.aggregate([
-        // 1) Filtrar trabajos en rango de fechas
+        // 1) Filtrar trabajos en rango de fechas excluyendo Error y HAR
         {
-          $match: {
-            fecha: { $gte: start, $lte: end },
-            status: { $ne: 'Error' },
-          },
+          $match: fileMatch,
         },
 
         // 2) Normalizar valores para evitar NaN
