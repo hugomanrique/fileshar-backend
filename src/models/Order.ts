@@ -36,6 +36,7 @@ export interface IOrder extends Document {
   }[]
   fecha: Date
   status: string
+  velocidad: 'Rápido' | 'Medio' | 'Lento'
 }
 
 const productSchema = new Schema({
@@ -84,6 +85,11 @@ const orderSchema = new Schema(
     ],
     fecha: { type: Date, default: Date.now },
     status: { type: String, default: 'Pendiente' },
+    velocidad: {
+      type: String,
+      enum: ['Rápido', 'Medio', 'Lento'],
+      default: 'Lento',
+    },
   },
   { timestamps: true }
 )

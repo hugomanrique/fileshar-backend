@@ -128,11 +128,13 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       })
 
       // 3. Create Order
+      const velocidadVal = payload.velocidad || fields.velocidad || 'Lento'
       const newOrder = new Order({
         cliente: client._id,
         productos: productosForOrder,
         status: 'Pendiente',
         fecha: dateBogota,
+        velocidad: velocidadVal,
       })
 
       await newOrder.save()
@@ -152,7 +154,23 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
 
 export const getOrders = async (req: Request, res: Response): Promise<void> => {
   try {
-    const orders = await Order.find().populate('cliente').sort({ fecha: -1 })
+    const { fecha, incluirEntregados, soloEntregados } = req.query
+    const filter: any = {}
+
+    if (soloEntregados === 'true') {
+      filter.status = 'Entregado'
+    } else if (incluirEntregados !== 'true') {
+      filter.status = { $ne: 'Entregado' }
+    }
+
+    if (fecha) {
+      const startDate = new Date(fecha as string)
+      const endDate = new Date(fecha as string)
+      endDate.setDate(endDate.getDate() + 1)
+      filter.fecha = { $gte: startDate, $lt: endDate }
+    }
+
+    const orders = await Order.find(filter).populate('cliente').sort({ fecha: -1 })
     res.status(200).json(orders)
   } catch (error) {
     console.error('Error fetching orders:', error)
@@ -404,4 +422,46 @@ export const updateProductImage = async (req: Request, res: Response): Promise<v
   })
 
   req.pipe(bb)
+}
+
+export const updateOrderVelocidad = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params
+  const { velocidad } = req.body
+
+  if (!velocidad || !['Rápido', 'Medio', 'Lento'].includes(velocidad)) {
+    res.status(400).json({ message: 'Velocidad inválida.' })
+    return
+  }
+
+  try {
+    const order = await Order.findById(id)
+    if (!order) {
+      res.status(404).json({ message: 'Order not found' })
+      return
+    }
+
+    const oldVelocidad = order.velocidad || 'Lento'
+    if (oldVelocidad === velocidad) {
+      res.status(200).json({ message: 'La velocidad es la misma', order })
+      return
+    }
+
+    order.velocidad = velocidad as 'Rápido' | 'Medio' | 'Lento'
+
+    const bogotaString = new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' })
+    const dateBogota = new Date(bogotaString + ' UTC')
+
+    order.comentarios.push({
+      texto: `La velocidad de la orden cambió de "${oldVelocidad}" a "${velocidad}".`,
+      importancia: 'Amarillo',
+      fecha: dateBogota,
+    })
+
+    await order.save()
+
+    res.status(200).json({ message: 'Velocidad de la orden actualizada', order })
+  } catch (error) {
+    console.error('Error updating order velocidad:', error)
+    res.status(500).json({ message: 'Server error updating order velocidad' })
+  }
 }
