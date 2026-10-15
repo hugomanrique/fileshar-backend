@@ -11,6 +11,7 @@ export interface IProduct {
   especial?: boolean
   tieneReferencia?: boolean
   referenciaArchivo?: string
+  tipoFigura?: string
   distribucionTallas?: {
     genero: string
     talla: string
@@ -49,6 +50,7 @@ const productSchema = new Schema({
   especial: { type: Boolean },
   tieneReferencia: { type: Boolean },
   referenciaArchivo: { type: String },
+  tipoFigura: { type: String },
   distribucionTallas: [
     {
       genero: { type: String },

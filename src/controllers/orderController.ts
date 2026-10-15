@@ -122,6 +122,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
           especial: prod.especial,
           tieneReferencia: prod.tieneReferencia,
           referenciaArchivo: referenciaArchivo,
+          tipoFigura: prod.tipoFigura,
           distribucionTallas: prod.distribucionTallas || [],
           personalizaciones: prod.personalizaciones || [],
         }
