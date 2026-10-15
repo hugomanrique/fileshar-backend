@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from 'mongoose'
+﻿import mongoose, { Document, Schema } from 'mongoose'
 import { IClient } from './Client'
 
 export interface IFile extends Document {
@@ -14,6 +14,8 @@ export interface IFile extends Document {
   metros: number
   valor: number
   reposicion: boolean
+  seRealizoMontaje: boolean
+  valorMontaje: number
   metodoPago: string
   code: string
   basePrice: number
@@ -32,6 +34,8 @@ const fileSchema: Schema = new Schema({
   valor: { type: Number },
   metros: { type: Number },
   reposicion: { type: Boolean, default: false },
+  seRealizoMontaje: { type: Boolean, default: false },
+  valorMontaje: { type: Number, default: 0 },
   metodoPago: { type: String },
   code: { type: String },
   basePrice: { type: Number },

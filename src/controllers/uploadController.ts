@@ -1,4 +1,4 @@
-import { Request, Response } from 'express'
+﻿import { Request, Response } from 'express'
 import Client, { IClient } from '../models/Client'
 import File from '../models/File'
 import busboy from 'busboy'
@@ -16,7 +16,10 @@ interface UploadBody {
   observaciones?: string
   tamanio?: string
   metros?: string | number
-  reposicion?: boolean
+  reposicion?: boolean | string
+  seRealizoMontaje?: boolean | string
+  montaje?: boolean | string
+  valorMontaje?: number | string
   basePrice?: number
   valor?: number
 }
@@ -125,6 +128,9 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
       const {
         cliente,
         reposicion,
+        seRealizoMontaje,
+        montaje,
+        valorMontaje,
         identificacion,
         email,
         telefono,
@@ -179,12 +185,28 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
       })
       const dateBogota = new Date(bogotaString + ' UTC')
       // console.log('Stored Date (Bogota as UTC):', dateBogota);
-      const total =
+
+      const isMontaje =
+        seRealizoMontaje === 'true' ||
+        seRealizoMontaje === true ||
+        montaje === 'true' ||
+        montaje === true
+      const parsedValorMontaje = isMontaje
+        ? parseFloat(String(valorMontaje || 0)) || 0
+        : 0
+
+      const baseCalculated =
         parsedMeters > 0
           ? (basePrice || 0) > 0
             ? Number(basePrice) * parsedMeters * Number(copias)
             : calculatePrice(parsedMeters, maquina, Number(copias))
           : 0
+
+      const total =
+        valor != null && !isNaN(Number(valor)) && Number(valor) > 0
+          ? Number(valor)
+          : baseCalculated + parsedValorMontaje
+
       // Generate Unique 4-digit Code
       let code = ''
       let isUnique = false
@@ -209,7 +231,9 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
         observaciones: observaciones,
         metros: parsedMeters,
         valor: total,
-        reposicion: reposicion ? true : false,
+        reposicion: reposicion === 'true' || reposicion === true,
+        seRealizoMontaje: isMontaje,
+        valorMontaje: parsedValorMontaje,
         status: 'En proceso',
         code: code,
         basePrice: basePrice,
@@ -311,26 +335,15 @@ export const getFiles = async (req: Request, res: Response): Promise<void> => {
 export const updateFile = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params
-    const { estado, metodoPago } = req.body
-    if (estado) {
-      const updatedFile = await File.findByIdAndUpdate(
-        id,
-        {
-          status: estado,
-        },
-        { new: true },
-      )
-      res.json(updatedFile)
-    } else if (metodoPago) {
-      const updatedFile = await File.findByIdAndUpdate(
-        id,
-        {
-          metodoPago: metodoPago,
-        },
-        { new: true },
-      )
-      res.json(updatedFile)
-    }
+    const { estado, metodoPago, seRealizoMontaje, valorMontaje } = req.body
+    const updateData: any = {}
+    if (estado !== undefined) updateData.status = estado
+    if (metodoPago !== undefined) updateData.metodoPago = metodoPago
+    if (seRealizoMontaje !== undefined) updateData.seRealizoMontaje = seRealizoMontaje
+    if (valorMontaje !== undefined) updateData.valorMontaje = valorMontaje
+
+    const updatedFile = await File.findByIdAndUpdate(id, updateData, { new: true })
+    res.json(updatedFile)
   } catch (error) {
     console.error('Update file error:', error)
     res.status(500).json({ message: 'Server error updating file' })
