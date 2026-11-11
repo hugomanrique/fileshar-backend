@@ -1,6 +1,8 @@
 ﻿import { Request, Response } from 'express'
 import Client, { IClient } from '../models/Client'
 import File from '../models/File'
+import LoyaltyPlan from '../models/LoyaltyPlan'
+import LoyaltyRedemption from '../models/LoyaltyRedemption'
 import busboy from 'busboy'
 import path from 'path'
 import fs from 'fs'
@@ -8,6 +10,7 @@ import { getIO } from '../socket/socket'
 
 interface UploadBody {
   cliente: string
+  clienteId?: string
   identificacion?: string
   email?: string
   telefono?: string
@@ -22,6 +25,8 @@ interface UploadBody {
   valorMontaje?: number | string
   basePrice?: number
   valor?: number
+  valorOriginal?: number | string
+  loyaltyPlanId?: string
 }
 
 const calculatePriceDTFTEXTIL = (meters: number, copies: number): number => {
@@ -127,6 +132,7 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
     try {
       const {
         cliente,
+        clienteId,
         reposicion,
         seRealizoMontaje,
         montaje,
@@ -140,27 +146,30 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
         metros,
         basePrice,
         valor,
+        valorOriginal,
+        loyaltyPlanId,
       } = fields as UploadBody
 
       // Parse centimetros (actually meters now) safely
       const parsedMeters = metros ? parseFloat(metros.toString()) : 0
 
       // 1. Find or Create Client
-      // Priority search by identificacion, then name
       const sanitizedTelefono = telefono != null ? String(telefono).replace(/\s+/g, '') : undefined
       const sanitizedIdentificacion = identificacion != null ? String(identificacion).replace(/\s+/g, '') : undefined
 
       let client = null
-      if (sanitizedTelefono) {
+      if (clienteId) {
+        client = await Client.findById(clienteId)
+      }
+      if (!client && sanitizedTelefono) {
         client = await Client.findOne({ celular: sanitizedTelefono })
       }
-
+      if (!client && sanitizedIdentificacion) {
+        client = await Client.findOne({ identificacion: sanitizedIdentificacion })
+      }
       if (!client && cliente) {
-        // If not found by ID, try finding by name if ID wasn't exclusive?
-        // Or just create new if ID provided but not found.
-        // Let's assume if ID is provided, we expect valid match or new client.
-        // If no ID, we might search by name? Safer to create new one or unique constraint.
-        // For simplicity, if not found, create.
+        const cleanName = cliente.trim().replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
+        client = await Client.findOne({ nombre: { $regex: new RegExp(`^${cleanName}$`, 'i') } })
       }
 
       if (!client) {
@@ -169,6 +178,7 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
           identificacion: sanitizedIdentificacion,
           email,
           celular: sanitizedTelefono,
+          puntos: 0,
         })
         await client.save()
       } else {
@@ -176,6 +186,7 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
         if (email) client.email = email
         if (sanitizedTelefono) client.celular = sanitizedTelefono
         if (sanitizedIdentificacion) client.identificacion = sanitizedIdentificacion
+        if (typeof client.puntos !== 'number') client.puntos = 0
         await client.save()
       }
       // Force date to be America/Bogotá time (stored as fake UTC)
@@ -202,10 +213,73 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
             : calculatePrice(parsedMeters, maquina, Number(copias))
           : 0
 
-      const total =
-        valor != null && !isNaN(Number(valor)) && Number(valor) > 0
-          ? Number(valor)
-          : baseCalculated + parsedValorMontaje
+      const rawOriginalTotal =
+        valorOriginal != null && !isNaN(Number(valorOriginal)) && Number(valorOriginal) > 0
+          ? Number(valorOriginal)
+          : valor != null && !isNaN(Number(valor)) && Number(valor) > 0 && !loyaltyPlanId
+            ? Number(valor)
+            : baseCalculated + parsedValorMontaje
+
+      const isReposicion = reposicion === 'true' || reposicion === true
+
+      let appliedPlan: any = null
+      let descuentoFidelizacion = 0
+      let puntosRedimidos = 0
+
+      if (loyaltyPlanId && String(loyaltyPlanId).trim() !== '') {
+        appliedPlan = await LoyaltyPlan.findById(String(loyaltyPlanId).trim())
+        if (!appliedPlan) {
+          res.status(400).json({ message: 'El plan de fidelización seleccionado no existe' })
+          return
+        }
+
+        // Verificar que el cliente tenga puntos suficientes
+        if ((client.puntos || 0) < appliedPlan.puntos) {
+          res.status(400).json({
+            message: `El cliente tiene ${client.puntos || 0} puntos y el plan requiere ${appliedPlan.puntos} puntos`,
+          })
+          return
+        }
+
+        // Verificar que el valor del plan no supere el 25% efectivo del valor de la compra
+        const maxDiscountAllowed = rawOriginalTotal * 0.25
+        if (appliedPlan.valor > maxDiscountAllowed) {
+          res.status(400).json({
+            message: `El descuento del plan ($${appliedPlan.valor}) no puede superar el 25% efectivo del valor de la compra ($${maxDiscountAllowed})`,
+          })
+          return
+        }
+
+        // Verificar que el cliente no haya redimido otro plan en el mismo día (Bogotá)
+        const startOfToday = new Date(dateBogota)
+        startOfToday.setUTCHours(0, 0, 0, 0)
+        const endOfToday = new Date(dateBogota)
+        endOfToday.setUTCHours(23, 59, 59, 999)
+
+        const existingRedemptionToday = await LoyaltyRedemption.findOne({
+          cliente: client._id,
+          fecha: { $gte: startOfToday, $lte: endOfToday },
+          status: 'Activo',
+        })
+
+        if (existingRedemptionToday) {
+          res.status(400).json({
+            message: 'El cliente ya redimió un plan de fidelización el día de hoy (máximo 1 plan por día)',
+          })
+          return
+        }
+
+        descuentoFidelizacion = appliedPlan.valor
+        puntosRedimidos = appliedPlan.puntos
+      }
+
+      const total = appliedPlan
+        ? Math.max(0, rawOriginalTotal - descuentoFidelizacion)
+        : rawOriginalTotal
+
+      // Solo se asignan puntos si NO es reposición y NO se usó un plan de fidelización
+      const puntosOtorgados =
+        isReposicion || appliedPlan ? 0 : Math.max(0, Math.floor(total / 1000))
 
       // Generate Unique 4-digit Code
       let code = ''
@@ -231,15 +305,44 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
         observaciones: observaciones,
         metros: parsedMeters,
         valor: total,
-        reposicion: reposicion === 'true' || reposicion === true,
+        valorOriginal: rawOriginalTotal,
+        reposicion: isReposicion,
         seRealizoMontaje: isMontaje,
         valorMontaje: parsedValorMontaje,
         status: 'En proceso',
         code: code,
         basePrice: basePrice,
+        puntosOtorgados: puntosOtorgados,
+        planRedimido: appliedPlan ? appliedPlan._id : undefined,
+        nombrePlanRedimido: appliedPlan ? appliedPlan.nombre : undefined,
+        puntosRedimidos: puntosRedimidos,
+        descuentoFidelizacion: descuentoFidelizacion,
+        tuvoDescuento: Boolean(appliedPlan && descuentoFidelizacion > 0),
       })
 
       await newFile.save()
+
+      if (appliedPlan) {
+        client.puntos = Math.max(0, (client.puntos || 0) - puntosRedimidos)
+        await client.save()
+
+        const redemption = new LoyaltyRedemption({
+          cliente: client._id,
+          file: newFile._id,
+          plan: appliedPlan._id,
+          nombrePlan: appliedPlan.nombre,
+          puntosRedimidos: puntosRedimidos,
+          valorDescuento: descuentoFidelizacion,
+          valorOriginalTrabajo: rawOriginalTotal,
+          valorFinalTrabajo: total,
+          fecha: dateBogota,
+          status: 'Activo',
+        })
+        await redemption.save()
+      } else if (puntosOtorgados > 0) {
+        client.puntos = (client.puntos || 0) + puntosOtorgados
+        await client.save()
+      }
 
       // console.log('File Saved:', newFile);
       // Notificas a todos los clientes que algo cambió
@@ -342,7 +445,71 @@ export const updateFile = async (req: Request, res: Response): Promise<void> => 
     if (seRealizoMontaje !== undefined) updateData.seRealizoMontaje = seRealizoMontaje
     if (valorMontaje !== undefined) updateData.valorMontaje = valorMontaje
 
-    const updatedFile = await File.findByIdAndUpdate(id, updateData, { new: true })
+    const existingFile = await File.findById(id)
+    if (!existingFile) {
+      res.status(404).json({ message: 'File not found' })
+      return
+    }
+
+    if (estado !== undefined && estado !== existingFile.status) {
+      // Si pasa a Error
+      if (estado === 'Error') {
+        if ((existingFile.puntosOtorgados || 0) > 0 && existingFile.cliente) {
+          const client = await Client.findById(existingFile.cliente)
+          if (client) {
+            client.puntos = Math.max(0, (client.puntos || 0) - existingFile.puntosOtorgados)
+            await client.save()
+          }
+          updateData.puntosOtorgados = 0
+        }
+        // Si el archivo tenía puntos redimidos y pasa a Error, devolver los puntos y marcar redención como Revertido
+        if ((existingFile.puntosRedimidos || 0) > 0 && existingFile.cliente) {
+          const activeRedemption = await LoyaltyRedemption.findOne({
+            file: existingFile._id,
+            status: 'Activo',
+          })
+          if (activeRedemption) {
+            activeRedemption.status = 'Revertido'
+            await activeRedemption.save()
+            const client = await Client.findById(existingFile.cliente)
+            if (client) {
+              client.puntos = (client.puntos || 0) + (existingFile.puntosRedimidos || 0)
+              await client.save()
+            }
+          }
+        }
+      } else if (existingFile.status === 'Error' && estado !== 'Error' && !existingFile.reposicion) {
+        if (existingFile.planRedimido && (existingFile.puntosRedimidos || 0) > 0) {
+          const revertedRedemption = await LoyaltyRedemption.findOne({
+            file: existingFile._id,
+            status: 'Revertido',
+          })
+          if (revertedRedemption && existingFile.cliente) {
+            const client = await Client.findById(existingFile.cliente)
+            if (client && (client.puntos || 0) >= (existingFile.puntosRedimidos || 0)) {
+              client.puntos = (client.puntos || 0) - (existingFile.puntosRedimidos || 0)
+              await client.save()
+              revertedRedemption.status = 'Activo'
+              await revertedRedemption.save()
+            }
+          }
+          updateData.puntosOtorgados = 0
+        } else {
+          // Si sale de Error a un estado válido y no tenía plan redimido ni es reposición, volver a otorgar puntos
+          const puntosRecuperados = Math.max(0, Math.floor((existingFile.valor || 0) / 1000))
+          if (puntosRecuperados > 0 && existingFile.cliente) {
+            const client = await Client.findById(existingFile.cliente)
+            if (client) {
+              client.puntos = (client.puntos || 0) + puntosRecuperados
+              await client.save()
+            }
+          }
+          updateData.puntosOtorgados = puntosRecuperados
+        }
+      }
+    }
+
+    const updatedFile = await File.findByIdAndUpdate(id, updateData, { new: true }).populate('cliente')
     res.json(updatedFile)
   } catch (error) {
     console.error('Update file error:', error)

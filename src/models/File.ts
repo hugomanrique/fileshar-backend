@@ -19,6 +19,13 @@ export interface IFile extends Document {
   metodoPago: string
   code: string
   basePrice: number
+  puntosOtorgados: number
+  planRedimido?: Schema.Types.ObjectId
+  nombrePlanRedimido?: string
+  puntosRedimidos?: number
+  descuentoFidelizacion?: number
+  tuvoDescuento?: boolean
+  valorOriginal?: number
 }
 
 const fileSchema: Schema = new Schema({
@@ -39,6 +46,13 @@ const fileSchema: Schema = new Schema({
   metodoPago: { type: String },
   code: { type: String },
   basePrice: { type: Number },
+  puntosOtorgados: { type: Number, default: 0 },
+  planRedimido: { type: Schema.Types.ObjectId, ref: 'LoyaltyPlan' },
+  nombrePlanRedimido: { type: String },
+  puntosRedimidos: { type: Number, default: 0 },
+  descuentoFidelizacion: { type: Number, default: 0 },
+  tuvoDescuento: { type: Boolean, default: false },
+  valorOriginal: { type: Number },
 })
 
 export default mongoose.model<IFile>('File', fileSchema)

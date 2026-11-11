@@ -7,6 +7,7 @@ export interface IClient extends Document {
   celular: string
   direccion: string
   tipo: string
+  puntos: number
 }
 
 const clientSchema: Schema = new Schema(
@@ -21,6 +22,7 @@ const clientSchema: Schema = new Schema(
     celular: { type: String },
     direccion: { type: String },
     tipo: { type: String },
+    puntos: { type: Number, default: 0 },
     // Add other fields as needed
   },
   { strict: false },

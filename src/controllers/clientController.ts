@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import Client from '../models/Client'
 import Order from '../models/Order'
 import File from '../models/File'
+import LoyaltyRedemption from '../models/LoyaltyRedemption'
 import { ParsedQs } from 'qs'
 
 function escapeRegex(text: string) {
@@ -102,8 +103,13 @@ export const unifyClients = async (req: Request, res: Response): Promise<void> =
       targetData.celular = String(targetData.celular).replace(/\s+/g, '').trim()
     }
 
+    // Sumar los puntos de todos los clientes a unificar
+    const clientsToMerge = await Client.find({ _id: { $in: idsToMerge } })
+    const totalPuntos = clientsToMerge.reduce((sum, c) => sum + (Number(c.puntos) || 0), 0)
+
     // Crear el nuevo cliente unificado (el frontend no envía _id)
     delete targetData._id
+    targetData.puntos = totalPuntos
     const targetClient = new Client(targetData)
     await targetClient.save()
     const targetId = targetClient._id
@@ -113,6 +119,12 @@ export const unifyClients = async (req: Request, res: Response): Promise<void> =
 
     // Reasignar archivos
     await File.updateMany({ cliente: { $in: idsToMerge } }, { $set: { cliente: targetId } })
+
+    // Reasignar historial de redenciones de fidelización
+    await LoyaltyRedemption.updateMany(
+      { cliente: { $in: idsToMerge } },
+      { $set: { cliente: targetId } },
+    )
 
     // Eliminar los clientes unificados
     await Client.deleteMany({ _id: { $in: idsToMerge } })

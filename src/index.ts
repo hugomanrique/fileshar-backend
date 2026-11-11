@@ -7,14 +7,18 @@ import clientRoutes from './routes/clientRoutes'
 import uploadRoutes from './routes/uploadRoutes'
 import dashboardRoutes from './routes/dashboardRoutes'
 import orderRoutes from './routes/orderRoutes'
+import loyaltyPlanRoutes from './routes/loyaltyPlanRoutes'
+import { seedDefaultLoyaltyPlans } from './controllers/loyaltyPlanController'
 import http from 'http'
 import { initSocket } from './socket/socket'
 
 const app: Express = express()
 const PORT: number | string = process.env.PORT || 3000
 
-// Connect to Database
-connectDB()
+// Connect to Database and seed default loyalty plans
+connectDB().then(() => {
+  seedDefaultLoyaltyPlans()
+})
 
 // Middleware
 app.use(cors())
@@ -26,6 +30,7 @@ app.use('/', clientRoutes)
 app.use('/', uploadRoutes)
 app.use('/', dashboardRoutes)
 app.use('/', orderRoutes)
+app.use('/', loyaltyPlanRoutes)
 app.use('/uploads', express.static('uploads'))
 
 // Basic health check
