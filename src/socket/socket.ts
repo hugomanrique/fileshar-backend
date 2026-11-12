@@ -9,6 +9,12 @@ export function initSocket(server: HttpServer) {
       origin: process.env.FRONTEND_ORIGIN?.split(',') || '*',
       methods: ['GET', 'POST'],
     },
+    pingInterval: 25000,
+    pingTimeout: 60000,
+    connectionStateRecovery: {
+      maxDisconnectionDuration: 2 * 60 * 1000,
+      skipMiddlewares: true,
+    },
   });
 
   io.on('connection', (socket) => {

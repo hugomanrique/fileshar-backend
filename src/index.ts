@@ -8,17 +8,14 @@ import uploadRoutes from './routes/uploadRoutes'
 import dashboardRoutes from './routes/dashboardRoutes'
 import orderRoutes from './routes/orderRoutes'
 import loyaltyPlanRoutes from './routes/loyaltyPlanRoutes'
-import { seedDefaultLoyaltyPlans } from './controllers/loyaltyPlanController'
 import http from 'http'
 import { initSocket } from './socket/socket'
 
 const app: Express = express()
 const PORT: number | string = process.env.PORT || 3000
 
-// Connect to Database and seed default loyalty plans
-connectDB().then(() => {
-  seedDefaultLoyaltyPlans()
-})
+// Connect to Database
+connectDB()
 
 // Middleware
 app.use(cors())

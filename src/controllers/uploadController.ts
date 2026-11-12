@@ -277,9 +277,12 @@ export const handleUpload = async (req: Request, res: Response): Promise<void> =
         ? Math.max(0, rawOriginalTotal - descuentoFidelizacion)
         : rawOriginalTotal
 
-      // Solo se asignan puntos si NO es reposición y NO se usó un plan de fidelización
+      // Valor exclusivo de la impresión (descontando el montaje) para cálculo de puntos
+      const valorImpresion = Math.max(0, rawOriginalTotal - parsedValorMontaje)
+
+      // Solo se asignan puntos sobre el valor de impresión (sin montaje), si NO es reposición y NO se usó un plan
       const puntosOtorgados =
-        isReposicion || appliedPlan ? 0 : Math.max(0, Math.floor(total / 1000))
+        isReposicion || appliedPlan ? 0 : Math.max(0, Math.floor(valorImpresion / 1000))
 
       // Generate Unique 4-digit Code
       let code = ''
@@ -495,8 +498,10 @@ export const updateFile = async (req: Request, res: Response): Promise<void> => 
           }
           updateData.puntosOtorgados = 0
         } else {
-          // Si sale de Error a un estado válido y no tenía plan redimido ni es reposición, volver a otorgar puntos
-          const puntosRecuperados = Math.max(0, Math.floor((existingFile.valor || 0) / 1000))
+          // Si sale de Error a un estado válido y no tenía plan redimido ni es reposición, volver a otorgar puntos solo sobre impresión (sin montaje)
+          const montajeExistente = existingFile.seRealizoMontaje ? (existingFile.valorMontaje || 0) : 0
+          const valorImpresionExistente = Math.max(0, (existingFile.valor || 0) - montajeExistente)
+          const puntosRecuperados = Math.max(0, Math.floor(valorImpresionExistente / 1000))
           if (puntosRecuperados > 0 && existingFile.cliente) {
             const client = await Client.findById(existingFile.cliente)
             if (client) {
@@ -510,6 +515,14 @@ export const updateFile = async (req: Request, res: Response): Promise<void> => 
     }
 
     const updatedFile = await File.findByIdAndUpdate(id, updateData, { new: true }).populate('cliente')
+
+    if (estado !== undefined && estado !== existingFile.status) {
+      getIO().emit('files:updated', {
+        reason: 'status_changed',
+        file: updatedFile,
+      })
+    }
+
     res.json(updatedFile)
   } catch (error) {
     console.error('Update file error:', error)

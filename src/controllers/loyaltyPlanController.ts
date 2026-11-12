@@ -3,39 +3,9 @@ import LoyaltyPlan from '../models/LoyaltyPlan'
 import LoyaltyRedemption from '../models/LoyaltyRedemption'
 import Client from '../models/Client'
 
-export const DEFAULT_LOYALTY_PLANS = [
-  { nombre: 'Bronce', puntos: 50, valor: 1000 },
-  { nombre: 'Plata', puntos: 100, valor: 2200 },
-  { nombre: 'Oro', puntos: 200, valor: 4500 },
-  { nombre: 'Platino', puntos: 350, valor: 8000 },
-  { nombre: 'Diamante', puntos: 500, valor: 12000 },
-  { nombre: 'VIP', puntos: 1000, valor: 25000 },
-]
-
-export const seedDefaultLoyaltyPlans = async (): Promise<void> => {
-  try {
-    for (const plan of DEFAULT_LOYALTY_PLANS) {
-      await LoyaltyPlan.findOneAndUpdate(
-        { nombre: { $regex: new RegExp(`^${plan.nombre}$`, 'i') } },
-        { $setOnInsert: { nombre: plan.nombre, puntos: plan.puntos, valor: plan.valor } },
-        { upsert: true, new: true },
-      )
-    }
-  } catch (err) {
-    console.error('Error seeding default loyalty plans:', err)
-  }
-}
-
-let hasSeededDefaults = false
-
 export const getLoyaltyPlans = async (_req: Request, res: Response): Promise<void> => {
   try {
-    if (!hasSeededDefaults) {
-      await seedDefaultLoyaltyPlans()
-      hasSeededDefaults = true
-    }
-
-    const plans = await LoyaltyPlan.find().sort({ puntos: 1 })
+    const plans = await LoyaltyPlan.find().sort({ puntos: 1 }).lean()
     res.status(200).json(plans)
   } catch (err: any) {
     console.error('Error fetching loyalty plans:', err)
@@ -50,6 +20,8 @@ export const getLoyaltyRedemptions = async (_req: Request, res: Response): Promi
       .populate('file', 'nombre code valor valorOriginal fecha status')
       .populate('plan', 'nombre puntos valor')
       .sort({ fecha: -1 })
+      .limit(100)
+      .lean()
     res.status(200).json(redemptions)
   } catch (err: any) {
     console.error('Error fetching loyalty redemptions:', err)
